@@ -5,14 +5,15 @@ import android.content.Intent;
 import android.media.MediaPlayer;
 import android.os.IBinder;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import android.content.ContentUris;
 import android.media.AudioManager;
-import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.PowerManager;
 import android.provider.MediaStore;
+import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 import com.github.amidupeuple.model.Song;
 
@@ -26,20 +27,20 @@ import android.app.PendingIntent;
 public class MusicService extends Service implements MediaPlayer.OnPreparedListener, MediaPlayer.OnErrorListener,
         MediaPlayer.OnCompletionListener {
     private static final String TAG = "MusicService";
-
-    //media player
-    private MediaPlayer player;
-    //song list
-    private ArrayList<Song> songs;
-    //current position
-    private int songPosn;
-
-    private final IBinder musicBind = new MusicBinder();
-
-    private String songTitle="";
     private static final int NOTIFY_ID=1;
+
+    private MediaPlayer player;         //media player
+    private ArrayList<Song> songs;      //song list
+    private int songPosn;               //current position
+    private final IBinder musicBind = new MusicBinder();
+    private String songTitle="";
     private boolean shuffle=false;
     private Random rand;
+    private MediaPlayerState mMediaPlayerCurrState;
+
+    public MediaPlayerState getMediaPlayerCurrState() {
+        return mMediaPlayerCurrState;
+    }
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -70,6 +71,9 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
     @Override
     public void onPrepared(MediaPlayer mp) {
         mp.start();
+        mMediaPlayerCurrState = MediaPlayerState.STARTED;
+
+        notifyActivityToUpdateSeekBar();
 
         Intent notIntent = new Intent(this, MainActivity.class);
         notIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
@@ -92,6 +96,7 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
         super.onCreate();
         songPosn = 0;
         player = new MediaPlayer();
+        mMediaPlayerCurrState = MediaPlayerState.IDLE;
         initMusicPlayer();
         rand = new Random();
     }
@@ -134,8 +139,15 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
         } catch (Exception e) {
             Log.e(TAG, "Error setting data source", e);
         }
+        mMediaPlayerCurrState = MediaPlayerState.INITIALIZED;
 
-        player.prepareAsync();
+        Log.d(TAG, "before preparing");
+        try {
+            player.prepare();
+        } catch (IOException e) {
+            Log.e(TAG, null, e);
+        }
+        mMediaPlayerCurrState = MediaPlayerState.PREPARED;
     }
 
     public void setSong(int songIndex) {
@@ -156,14 +168,17 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
 
     public void pausePlayer(){
         player.pause();
+        mMediaPlayerCurrState = MediaPlayerState.PAUSED;
     }
 
     public void seek(int posn){
         player.seekTo(posn);
     }
 
-    public void go(){
+    public void resumePlayback(){
         player.start();
+        mMediaPlayerCurrState = MediaPlayerState.STARTED;
+        notifyActivityToUpdateSeekBar();
     }
 
     public void playPrev(){
@@ -189,8 +204,19 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
         playSong();
     }
 
+    public long getSongId() {
+        return songs.get(songPosn).getId();
+    }
+
     @Override
     public void onDestroy() {
         stopForeground(true);
     }
+
+    private void notifyActivityToUpdateSeekBar() {
+        Intent intent = new Intent("updateSeekbar");
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
+    }
+
+    public enum MediaPlayerState{IDLE, INITIALIZED, PREPARED, STARTED, PAUSED};
 }

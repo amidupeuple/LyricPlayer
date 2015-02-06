@@ -1,6 +1,7 @@
 package com.github.amidupeuple.main;
 
 import android.app.Activity;
+import android.content.*;
 import android.graphics.Color;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -13,64 +14,51 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import android.net.Uri;
-import android.content.ContentResolver;
 import android.database.Cursor;
 import android.provider.MediaStore;
+import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
-import android.widget.AdapterView;
-import android.widget.ListView;
-import android.widget.TextView;
+import android.widget.*;
 import com.github.amidupeuple.model.Song;
 import android.os.IBinder;
-import android.content.ComponentName;
-import android.content.Context;
-import android.content.Intent;
-import android.content.ServiceConnection;
 import android.view.MenuItem;
 import android.view.View;
 import com.github.amidupeuple.service.DownloadLyricService;
-import android.widget.MediaController.MediaPlayerControl;
 
-public class MainActivity extends Activity implements MediaPlayerControl{
+public class MainActivity extends Activity implements SeekBar.OnSeekBarChangeListener {
     private static final String TAG = "MainActivity";
     private static final int INIT_POSITION = -1;
     public static final String EXTRA_LYRIC = "lyric";
 
+    private SeekBar mSeekBar;
+    private ImageButton mPlayPauseButton;
+    private boolean isPlayPauseButtonPressed;
+
     private ArrayList<Song> songList;
     private ListView songView;
-
     private MusicService musicSrv;
     private Intent playIntent;
     private boolean musicBound = false;
     private SongAdapter mSongAdapter;
     private String mCurrentLyric;
 
-    private MusicController controller;
-    private boolean paused = false, playbackPaused = false;
-
     private int selectedItemPosition = INIT_POSITION;
     private String mockLyric;
 
+    private BroadcastReceiver mUpdateSeekBarReceiver = new BroadcastReceiver() {
+        private static final String TAG = "BroadcastReceiver/UpdateSeekBar";
 
-    private void setController() {
-        controller = new MusicController(this);
-        controller.setPrevNextListeners(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                playNext();
-            }
-        }, new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                playPrev();
-            }
-        });
-        controller.setMediaPlayer(this);
-        controller.setAnchorView(findViewById(R.id.song_list));
-        controller.setEnabled(true);
-    }
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            mSeekBar.setEnabled(true);
+            Log.d(TAG, "duration:" + musicSrv.getDur());
+            mSeekBar.setMax(musicSrv.getDur());
+            new Thread(new UpdateSeekBar()).start();
+            Log.d(TAG, "seek bar update is started!");
+        }
+    };
 
     public String getMockLyric() {
         return mockLyric;
@@ -106,24 +94,62 @@ public class MainActivity extends Activity implements MediaPlayerControl{
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
 
+        isPlayPauseButtonPressed = false;
+
+        mSeekBar = (SeekBar) findViewById(R.id.musicSeekBar);
+        mSeekBar.setOnSeekBarChangeListener(this);
+        mSeekBar.setEnabled(false);
+
+        mPlayPauseButton = (ImageButton) findViewById(R.id.playPauseButton);
+        mPlayPauseButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (isPlayPauseButtonPressed) {
+                    mPlayPauseButton.setImageResource(R.drawable.play);
+                    isPlayPauseButtonPressed = false;
+                } else {
+                    mPlayPauseButton.setImageResource(R.drawable.pause);
+                    isPlayPauseButtonPressed = true;
+                }
+            }
+        });
+
+        //Register activity as receiver
+        LocalBroadcastManager.getInstance(this).registerReceiver(mUpdateSeekBarReceiver, new IntentFilter("updateSeekbar"));
+
         songView = (ListView) findViewById(R.id.song_list);
         songView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                int prevPosition = selectedItemPosition;
-                selectedItemPosition = position;
-                songPicked(view);
-                controller.setSelected(true);
-                View prevView = songView.getChildAt(prevPosition - songView.getFirstVisiblePosition());
-                if (prevPosition != INIT_POSITION && prevView != null) {
-                    prevView.setBackgroundResource(R.color.default_color);
-                }
-                view.setBackgroundColor(Color.WHITE);
+                if (position == selectedItemPosition) {
+                    //current item was selected
+                    switch(musicSrv.getMediaPlayerCurrState()) {
+                        case STARTED: Log.d(TAG, "pause playback");
+                            musicSrv.pausePlayer();
+                            break;
+                        case PAUSED:  Log.d(TAG, "resume playback");
+                            musicSrv.resumePlayback();
+                            break;
+                    }
+                } else {
+                    //another item was selected
+                    mSeekBar.setEnabled(false);
 
-                //Get lyric
-                String artist = ((TextView) view.findViewById(R.id.song_artist)).getText().toString();
-                String song = ((TextView) view.findViewById(R.id.song_title)).getText().toString();
-                new DownloadLyricTask().execute(artist, song, mockLyric);
+                    int prevPosition = selectedItemPosition;
+                    selectedItemPosition = position;
+                    songPicked(view);
+                    View prevView = songView.getChildAt(prevPosition - songView.getFirstVisiblePosition());
+                    if (prevPosition != INIT_POSITION && prevView != null) {
+                        prevView.setBackgroundResource(R.color.default_color);
+                    }
+                    view.setBackgroundColor(Color.WHITE);
+
+                    //Get lyric
+                    String artist = ((TextView) view.findViewById(R.id.song_artist)).getText().toString();
+                    String song = ((TextView) view.findViewById(R.id.song_title)).getText().toString();
+                    new DownloadLyricTask().execute(artist, song, mockLyric);
+                }
+
             }
         });
         songList = new ArrayList<Song>();
@@ -141,8 +167,6 @@ public class MainActivity extends Activity implements MediaPlayerControl{
 
         //init lyric mock
         initMockLyric();
-
-        setController();
     }
 
     private void initMockLyric() {
@@ -204,18 +228,12 @@ public class MainActivity extends Activity implements MediaPlayerControl{
 
     @Override
     protected void onStop() {
-        controller.hide();
         super.onStop();
     }
 
     public void songPicked(View view) {
         musicSrv.setSong((Integer.parseInt(view.getTag().toString())));
         musicSrv.playSong();
-        if (playbackPaused) {
-            setController();
-            playbackPaused = false;
-        }
-        controller.show(0);
     }
 
     @Override
@@ -242,16 +260,11 @@ public class MainActivity extends Activity implements MediaPlayerControl{
     @Override
     protected void onPause() {
         super.onPause();
-        paused = true;
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        if (paused) {
-            setController();
-            paused = false;
-        }
     }
 
     @Override
@@ -261,91 +274,29 @@ public class MainActivity extends Activity implements MediaPlayerControl{
         super.onDestroy();
     }
 
-    @Override
-    public void start() {
-        musicSrv.go();
-    }
-
-    @Override
-    public void pause() {
-        playbackPaused = true;
-        musicSrv.pausePlayer();
-    }
-
-    @Override
-    public int getDuration() {
-        if (musicSrv != null && musicBound && musicSrv.isPng()) {
-            return musicSrv.getDur();
-        } else {
-            return 0;
-        }
-    }
-
-    @Override
-    public int getCurrentPosition() {
-        if (musicSrv != null && musicBound && musicSrv.isPng()) {
-            return musicSrv.getPosn();
-        }else {
-            return 0;
-        }
-    }
-
-    @Override
-    public void seekTo(int pos) {
-        musicSrv.seek(pos);
-    }
-
-    @Override
-    public boolean isPlaying() {
-        if (musicSrv != null && musicBound) {
-            return musicSrv.isPng();
-        }
-        return false;
-    }
-
-    @Override
-    public int getBufferPercentage() {
-        return 0;
-    }
-
-    @Override
-    public boolean canPause() {
-        return true;
-    }
-
-    @Override
-    public boolean canSeekBackward() {
-        return true;
-    }
-
-    @Override
-    public boolean canSeekForward() {
-        return true;
-    }
-
-    @Override
-    public int getAudioSessionId() {
-        return 0;
-    }
-
     //play next
     private void playNext(){
         musicSrv.playNext();
-        if (playbackPaused) {
-            setController();
-            playbackPaused = false;
-        }
-        controller.show(0);
     }
 
     //play previous
     private void playPrev(){
         musicSrv.playPrev();
-        if (playbackPaused) {
-            setController();
-            playbackPaused = false;
-        }
-        controller.show(0);
+    }
+
+    @Override
+    public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+
+    }
+
+    @Override
+    public void onStartTrackingTouch(SeekBar seekBar) {
+
+    }
+
+    @Override
+    public void onStopTrackingTouch(SeekBar seekBar) {
+
     }
 
     private class DownloadLyricTask extends AsyncTask<String, Void, String> {
@@ -358,6 +309,33 @@ public class MainActivity extends Activity implements MediaPlayerControl{
         @Override
         protected void onPostExecute(String songLyric) {
             mCurrentLyric = songLyric;
+        }
+    }
+
+    /**
+     * This job starts when
+     */
+    class UpdateSeekBar implements Runnable {
+        private static final String TAG = "UpdateSeekBar";
+        @Override
+        public void run() {
+            Log.d(TAG, "start update seek bar");
+            int currPos = musicSrv.getPosn();
+            int total = musicSrv.getDur();
+            long id = musicSrv.getSongId();
+
+            while (currPos < total && id == musicSrv.getSongId() && musicSrv.isPng()) {
+                try {
+                    Thread.sleep(1000);
+                } catch (Exception e) {
+                    Log.e(TAG, null, e);
+                }
+                currPos = musicSrv.getPosn();
+                Log.d(TAG, "currPos:" + currPos + " total:" + total);
+                mSeekBar.setProgress(currPos);
+            }
+            Log.d(TAG, "finish update seek bar:currPos/total " + currPos + "/" + total +
+                       " initId/curId " + id + "/" + musicSrv.getSongId() + " isPlaying:" + musicSrv.isPng());
         }
     }
 }

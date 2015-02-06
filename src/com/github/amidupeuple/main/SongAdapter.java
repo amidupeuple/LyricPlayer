@@ -18,6 +18,7 @@ import com.github.amidupeuple.model.Song;
  */
 public class SongAdapter extends BaseAdapter {
     private static final String TAG = "SongAdapter";
+
     private ArrayList<Song> songs;
     private LayoutInflater songInf;
     private MainActivity mainActivity;

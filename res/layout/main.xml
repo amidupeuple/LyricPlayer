@@ -9,8 +9,57 @@
     <ListView
             android:id="@+id/song_list"
             android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:choiceMode="singleChoice">
+            android:layout_height="0dp"
+            android:choiceMode="singleChoice"
+            android:layout_weight="9">
     </ListView>
+
+
+    <LinearLayout
+            android:id="@+id/playback_control_layout"
+            android:layout_width="fill_parent"
+            android:layout_height="0dp"
+            android:background="#BAE7FF"
+            android:layout_weight="1">
+
+
+        <!--<ToggleButton
+                android:id="@+id/playPauseButton"
+                android:layout_width="50dp"
+                android:layout_height="match_parent"
+                android:layout_marginLeft="5px"
+                android:layout_marginTop="5px"
+                android:layout_marginBottom="10px"
+                android:textOn=""
+                android:textOff=""
+                android:text=""
+                android:background="@drawable/play_pause"
+                >
+        </ToggleButton>-->
+
+        <ImageButton
+                android:id="@+id/playPauseButton"
+                android:layout_width="50dp"
+                android:layout_height="match_parent"
+                android:layout_marginLeft="5px"
+                android:layout_marginTop="5px"
+                android:src="@drawable/play"
+                android:background="@android:color/white">
+        </ImageButton>
+        <SeekBar
+                android:id="@+id/musicSeekBar"
+                android:layout_width="271dp"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="5px"
+                android:layout_weight="0.77"
+                android:paddingTop="18px"
+                android:paddingBottom="10px"
+                android:paddingLeft="30px"
+                android:paddingRight="30px"
+                android:minHeight="6dip"
+                android:maxHeight="6dip"
+                android:layout_centerVertical="true">
+        </SeekBar>
+    </LinearLayout>
 </LinearLayout>
 
