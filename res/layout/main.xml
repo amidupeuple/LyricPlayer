@@ -6,13 +6,20 @@
               android:layout_height="fill_parent"
               android:background="#6DD5F2"
               tools:context=".MainActivity">
-    <ListView
+    <!--<ListView
             android:id="@+id/song_list"
             android:layout_width="fill_parent"
             android:layout_height="0dp"
             android:choiceMode="singleChoice"
             android:layout_weight="9">
-    </ListView>
+    </ListView>-->
+    <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                 android:id="@+id/fragmentContainer"
+                 android:layout_width="match_parent"
+                 android:layout_height="0dp"
+                 android:layout_weight="9">
+
+    </FrameLayout>
 
 
     <LinearLayout
@@ -21,7 +28,6 @@
             android:layout_height="0dp"
             android:background="#BAE7FF"
             android:layout_weight="1">
-
 
         <!--<ToggleButton
                 android:id="@+id/playPauseButton"

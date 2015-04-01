@@ -1,8 +1,6 @@
 package com.github.amidupeuple.main;
 
-import android.app.Activity;
 import android.content.*;
-import android.graphics.Color;
 import android.os.AsyncTask;
 import android.os.Bundle;
 
@@ -16,6 +14,9 @@ import java.util.Comparator;
 import android.net.Uri;
 import android.database.Cursor;
 import android.provider.MediaStore;
+import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentActivity;
+import android.support.v4.app.FragmentManager;
 import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 import android.view.Menu;
@@ -27,7 +28,7 @@ import android.view.MenuItem;
 import android.view.View;
 import com.github.amidupeuple.service.DownloadLyricService;
 
-public class MainActivity extends Activity implements SeekBar.OnSeekBarChangeListener {
+public class MainActivity extends FragmentActivity implements SeekBar.OnSeekBarChangeListener {
     private static final String TAG = "MainActivity";
     private static final int INIT_POSITION = -1;
     public static final String EXTRA_LYRIC = "lyric";
@@ -46,6 +47,10 @@ public class MainActivity extends Activity implements SeekBar.OnSeekBarChangeLis
 
     private int selectedItemPosition = INIT_POSITION;
     private String mockLyric;
+
+    public ArrayList<Song> getSongList() {
+        return songList;
+    }
 
     private BroadcastReceiver mUpdateSeekBarReceiver = new BroadcastReceiver() {
         private static final String TAG = "BroadcastReceiver/UpdateSeekBar";
@@ -86,13 +91,20 @@ public class MainActivity extends Activity implements SeekBar.OnSeekBarChangeLis
         return true;
     }
 
-    /**
-     * Called when the activity is first created.
-     */
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
+
+        FragmentManager fm = getSupportFragmentManager();
+        Fragment fragment = fm.findFragmentById(R.id.fragmentContainer);
+
+        if (fragment == null) {
+            fragment = new AllSongsListFragment();
+            fm.beginTransaction().add(R.id.fragmentContainer, fragment).commit();
+            Log.d(TAG, "transaction was committed");
+        }
 
         isPlayPauseButtonPressed = false;
 
@@ -117,7 +129,8 @@ public class MainActivity extends Activity implements SeekBar.OnSeekBarChangeLis
         //Register activity as receiver
         LocalBroadcastManager.getInstance(this).registerReceiver(mUpdateSeekBarReceiver, new IntentFilter("updateSeekbar"));
 
-        songView = (ListView) findViewById(R.id.song_list);
+
+        /*songView = (ListView) findViewById(R.id.song_list);
         songView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
@@ -151,9 +164,9 @@ public class MainActivity extends Activity implements SeekBar.OnSeekBarChangeLis
                 }
 
             }
-        });
+        });*/
         songList = new ArrayList<Song>();
-        getSongList();
+        initialieSongList();
 
         Collections.sort(songList, new Comparator<Song>() {
             @Override
@@ -162,11 +175,11 @@ public class MainActivity extends Activity implements SeekBar.OnSeekBarChangeLis
             }
         });
 
-        mSongAdapter = new SongAdapter(this, songList);
+        /*mSongAdapter = new SongAdapter(this, songList);
         songView.setAdapter(mSongAdapter);
 
         //init lyric mock
-        initMockLyric();
+        initMockLyric();*/
     }
 
     private void initMockLyric() {
@@ -196,7 +209,7 @@ public class MainActivity extends Activity implements SeekBar.OnSeekBarChangeLis
         return selectedItemPosition;
     }
 
-    private void getSongList() {
+    private void initialieSongList() {
         ContentResolver musicResolver = getContentResolver();
         Uri musicUri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
         Cursor musicCursor = musicResolver.query(musicUri, null, null, null, null);
@@ -205,13 +218,15 @@ public class MainActivity extends Activity implements SeekBar.OnSeekBarChangeLis
             int titleColumn = musicCursor.getColumnIndex(MediaStore.Audio.Media.TITLE);
             int idColumn = musicCursor.getColumnIndex(MediaStore.Audio.Media._ID);
             int artistColumn = musicCursor.getColumnIndex(MediaStore.Audio.Media.ARTIST);
+            int albumColumn = musicCursor.getColumnIndex(MediaStore.Audio.Media.ALBUM);
 
             do {
                 long thisId = musicCursor.getLong(idColumn);
                 String thisTitle = musicCursor.getString(titleColumn);
                 String thisArtist = musicCursor.getString(artistColumn);
-                songList.add(new Song(thisId, thisTitle, thisArtist));
-                Log.d(TAG, "New song added: " + thisArtist + ":" + thisTitle);
+                String thisAlbum = musicCursor.getString(albumColumn);
+                songList.add(new Song(thisId, thisTitle, thisArtist, thisAlbum));
+                Log.d(TAG, "New song added: " + thisArtist + ": " + thisAlbum + ": " + thisTitle);
             } while (musicCursor.moveToNext());
         }
     }
@@ -236,11 +251,18 @@ public class MainActivity extends Activity implements SeekBar.OnSeekBarChangeLis
         musicSrv.playSong();
     }
 
+    private void changeSongListFragment() {
+        FragmentManager fm = getSupportFragmentManager();
+        Fragment fragment = new ExpandableListMainFragment();
+        fm.beginTransaction().replace(R.id.fragmentContainer, fragment).addToBackStack(null).commit();
+        Log.d(TAG, "transaction was committed");
+    }
+
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
-            case R.id.action_shuffle:
-                musicSrv.setShuffle();
+            case R.id.song_layout:
+                changeSongListFragment();
                 break;
             case R.id.action_end:
                 stopService(playIntent);
